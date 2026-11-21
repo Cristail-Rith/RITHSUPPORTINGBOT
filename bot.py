@@ -5,6 +5,7 @@ import re
 import base64
 import codecs
 import mimetypes
+import threading
 import urllib.parse
 import sqlite3
 import logging
@@ -12,6 +13,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from collections import deque
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from google import genai
 from google.genai import types
 from telegram import Update
@@ -49,6 +51,23 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+# --- RENDER HEALTH-CHECK WEB SERVER ---
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"CTF AI Bot v2.7 is alive")
+
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    port = int(os.environ.get("PORT", "10000"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    logging.info(f"Health-check HTTP server listening on port {port}")
 
 # --- PERSISTENT SQLITE DATABASE FOR TEAM NOTES & USER TRACKING ---
 def init_db():
@@ -244,9 +263,9 @@ STRICT RULES FOR EVERY RESPONSE:
 1. NO FLUFF OR TEXTBOOK LECTURES: Never give generic beginner tutorials unless explicitly asked. Get straight to exploitation, enumeration, and solving.
 2. ACTIONABLE ONE-LINERS: Provide exact, copy-pasteable commands, payloads, or Python exploit scripts (using pwntools, requests, etc.).
 3. THINK IN ATTACK CHAINS: When given ports, services, code, images, PDFs, DOCX, ZIP archives, or logs, state:
-   - What is vulnerable or hidden and why (1-2 lines).
-   - Exact command/payload to test or exploit it right now.
-   - What to check next if that fails.
+  - What is vulnerable or hidden and why (1-2 lines).
+  - Exact command/payload to test or exploit it right now.
+  - What to check next if that fails.
 4. TELEGRAM FORMATTING: Use Telegram Markdown (*bold*, `inline code`, and ```bash or ```python code blocks). NEVER use ### headers (Telegram does not render them; use *BOLD UPPERCASE* instead).
 5. LANGUAGE: If asked in Khmer, explain concisely in Khmer while keeping all technical terms, commands, and payloads in English.
 """
@@ -344,7 +363,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
     help_text = (
-        "*CTF AI Agent v2.6 Online*\n\n"
+        "*CTF AI Agent v2.7 Online*\n\n"
         "*Commands:*\n"
         "• `/ask <question>` - Ask for CTF attack vectors, payloads, or hints\n"
         "• `/analyze <code/nmap/log>` - Deep vulnerability & exploit analysis\n"
@@ -665,6 +684,7 @@ async def global_error_handler(update: object, context: ContextTypes.DEFAULT_TYP
 if __name__ == '__main__':
     init_db()
     discover_models()
+    start_health_server()
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(TypeHandler(Update, track_user_and_alert), group=-1)
@@ -683,5 +703,5 @@ if __name__ == '__main__':
 
     app.add_error_handler(global_error_handler)
 
-    print(f"CTF AI Bot v2.6 is running (Admin ID: {ADMIN_ID})...")
+    print(f"CTF AI Bot v2.7 is running (Admin ID: {ADMIN_ID})...")
     app.run_polling(drop_pending_updates=True)
